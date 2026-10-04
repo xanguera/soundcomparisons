@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f2f4f3" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#11171a" media="(prefers-color-scheme: dark)">
+<title>Sound Comparisons Pocket</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Charis+SIL:wght@400;700&family=Instrument+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+/* Layout: one-screen app — study tabs + word bar on top, map above, scrolling pronunciation list below */
+:root{
+  --bg:#f2f4f3; --surface:#ffffff; --ink:#15211f; --muted:#5d6b68; --line:#d9e0dd;
+  --accent:#0f6e64; --accent-ink:#ffffff; --hl:#e3f1ee;
+  --f-ui:"Instrument Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --f-ipa:"Charis SIL","Gentium Plus","Doulos SIL","Noto Serif","Times New Roman",serif;
+  --r:12px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#11171a; --surface:#182124; --ink:#e6eeec; --muted:#93a39f; --line:#273235;
+  --accent:#4fc1b1; --accent-ink:#0b1513; --hl:#1e3431; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#11171a; --surface:#182124; --ink:#e6eeec; --muted:#93a39f; --line:#273235;
+  --accent:#4fc1b1; --accent-ink:#0b1513; --hl:#1e3431; color-scheme:dark}
+
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.4 var(--f-ui);-webkit-tap-highlight-color:transparent;
+  display:flex;flex-direction:column;overflow:hidden;
+  padding-top:env(safe-area-inset-top,0px)}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+[hidden]{display:none!important}
+
+/* Study tabs */
+.studies{display:flex;gap:6px;overflow-x:auto;padding:10px 16px 8px;scrollbar-width:none;flex:none}
+.studies::-webkit-scrollbar{display:none}
+.chip{flex:none;padding:7px 13px;border-radius:999px;border:1px solid var(--line);background:var(--surface);
+  font-size:14px;font-weight:500;color:var(--muted);white-space:nowrap}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+
+/* Word bar */
+.wordbar{display:flex;align-items:center;gap:6px;padding:2px 10px 10px;flex:none}
+.nav{width:44px;height:48px;border-radius:var(--r);display:grid;place-items:center;color:var(--muted)}
+.nav:active{background:var(--hl)}
+.nav svg{width:22px;height:22px}
+.word{flex:1;min-width:0;height:52px;border-radius:var(--r);background:var(--surface);border:1px solid var(--line);
+  display:flex;flex-direction:column;justify-content:center;align-items:flex-start;padding:0 14px;text-align:left}
+.word .g{font-size:19px;font-weight:600;line-height:1.15;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.word .p{font:italic 13px var(--f-ipa);color:var(--muted);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.word .p:empty{display:none}
+
+/* Map */
+#map{flex:0 0 40%;min-height:180px;background:var(--line);border-block:1px solid var(--line)}
+.leaflet-container{font-family:var(--f-ui)}
+.leaflet-tooltip.lt{background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:8px;
+  box-shadow:0 2px 10px rgb(0 0 0 / .18);padding:5px 9px;font-size:13px}
+.leaflet-tooltip.lt::before{display:none}
+.lt b{font-weight:600}
+.lt i{font:normal 16px var(--f-ipa);display:block}
+.leaflet-control-attribution{font-size:10px}
+
+/* List */
+.listhead{display:flex;align-items:center;gap:10px;padding:10px 16px;flex:none}
+.listhead .count{flex:1;min-width:0;color:var(--muted);font-size:13px;font-variant-numeric:tabular-nums}
+.playall{display:flex;align-items:center;gap:6px;padding:8px 14px;border-radius:999px;background:var(--accent);color:var(--accent-ink);font-weight:600;font-size:14px}
+.playall svg{width:16px;height:16px}
+#list{flex:1;overflow-y:auto;padding:0 16px calc(16px + env(safe-area-inset-bottom,0px));overscroll-behavior:contain}
+.region{position:sticky;top:0;background:var(--bg);z-index:2;display:flex;align-items:center;gap:8px;
+  padding:12px 0 6px;font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.dot{width:10px;height:10px;border-radius:50%;flex:none}
+.row{display:flex;align-items:center;gap:10px;width:100%;min-height:56px;padding:8px 10px;border-radius:var(--r);text-align:left;
+  border:1px solid transparent}
+.row + .row{margin-top:2px}
+.row:active{background:var(--hl)}
+.row.sel{background:var(--hl);border-color:color-mix(in srgb,var(--accent) 40%,transparent)}
+.row .who{flex:1;min-width:0}
+.row .name{font-size:14px;color:var(--muted);line-height:1.25}
+.row .ipas{display:flex;flex-wrap:wrap;gap:4px 14px}
+.ipa{font:20px/1.35 var(--f-ipa);color:var(--ink);word-break:break-word}
+.ipa.alt{font-size:17px}
+.spk{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;flex:none;color:var(--accent);border:1px solid var(--line);background:var(--surface)}
+.spk svg{width:18px;height:18px}
+.row.playing .spk{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.row.nosnd .spk{opacity:.35}
+.credit{color:var(--muted);font-size:12px;padding:18px 2px 4px;line-height:1.5}
+.credit a{color:var(--accent)}
+
+/* Word picker sheet */
+.sheet{position:fixed;inset:0;z-index:1000;background:var(--bg);display:flex;flex-direction:column;
+  padding-top:env(safe-area-inset-top,0px)}
+.sheet header{display:flex;gap:8px;align-items:center;padding:10px 12px 10px 16px;border-bottom:1px solid var(--line)}
+#q{flex:1;min-width:0;height:44px;border-radius:var(--r);border:1px solid var(--line);background:var(--surface);color:var(--ink);
+  font:16px var(--f-ui);padding:0 12px}
+.close{height:44px;padding:0 10px;color:var(--accent);font-weight:600}
+#words{flex:1;overflow-y:auto;padding:4px 8px calc(12px + env(safe-area-inset-bottom,0px))}
+.wi{display:flex;align-items:baseline;gap:10px;width:100%;padding:12px 8px;border-bottom:1px solid var(--line);text-align:left}
+.wi .g{font-weight:500;flex:none;max-width:60%}
+.wi .p{font:italic 15px var(--f-ipa);color:var(--muted);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wi .n{color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
+.wi.cur{background:var(--hl);border-radius:8px}
+.toast{position:fixed;left:50%;bottom:calc(18px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:1100;
+  background:var(--ink);color:var(--bg);padding:9px 14px;border-radius:999px;font-size:13px;max-width:calc(100% - 32px)}
+
+@media (min-width:900px){
+  body{display:grid;grid-template-columns:420px 1fr;grid-template-rows:auto auto auto 1fr}
+  .studies,.wordbar,.listhead,#list{grid-column:1}
+  #map{grid-column:2;grid-row:1 / -1;border:0;border-left:1px solid var(--line)}
+}
+@media (prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
+</style>
+</head>
+<body>
+<nav class="studies" id="studies" aria-label="Language family"></nav>
+<div class="wordbar">
+  <button class="nav" id="prev" aria-label="Previous word"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+  <button class="word" id="wordbtn" aria-label="Choose word"><span class="g" id="wg"></span><span class="p" id="wp"></span></button>
+  <button class="nav" id="next" aria-label="Next word"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></button>
+</div>
+<div id="map" aria-label="Map of recording locations"></div>
+<div class="listhead">
+  <span class="count" id="count"></span>
+  <button class="playall" id="playall"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l13-7.5z"/></svg><span>Play all</span></button>
+</div>
+<div id="list"></div>
+
+<div class="sheet" id="sheet" hidden role="dialog" aria-label="Choose a word">
+  <header><input id="q" type="search" placeholder="Search words" autocomplete="off" enterkeyhint="search"><button class="close" id="close">Done</button></header>
+  <div id="words"></div>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script id="scdata" type="application/json">__DATA__</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+(() => {
+const DATA = JSON.parse(document.getElementById('scdata').textContent);
+const SND = 'https://soundcomparisons.com/sound/';
+const STUDIES = Object.keys(DATA);
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const ICON_SPK = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16 8.5a5 5 0 0 1 0 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+const ICON_PLAY = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l13-7.5z"/></svg>';
+const ICON_STOP = '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>';
+
+const store = {get(k){try{return localStorage.getItem(k)}catch(e){return null}}, set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
+
+let S = null, studyName = null, wi = 0, sel = -1, rows = [], markers = {}, queue = null;
+const audio = new Audio(); audio.preload = 'auto';
+
+// ---------- Map ----------
+const map = L.map('map', {zoomControl: false, attributionControl: true, worldCopyJump: true}).setView([45, 5], 4);
+const dark = matchMedia('(prefers-color-scheme: dark)');
+let tiles = null;
+function setTiles(){
+  const isDark = (document.documentElement.dataset.theme || (dark.matches ? 'dark' : 'light')) === 'dark';
+  const base = `https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_${isDark ? 'Dark' : 'Light'}_Gray_Base/MapServer/tile/{z}/{y}/{x}`;
+  if (tiles) map.removeLayer(tiles);
+  tiles = L.tileLayer(base, {maxZoom: 16, attribution: 'Tiles &copy; Esri &mdash; Esri, HERE, Garmin, &copy; OpenStreetMap contributors'}).addTo(map);
+}
+setTiles(); dark.addEventListener?.('change', setTiles);
+const canvas = L.canvas({tolerance: 10, padding: .5});
+const layer = L.layerGroup().addTo(map);
+
+// ---------- Helpers ----------
+function regionColor(i, n){
+  if (i < 0) return '#888';
+  const h = Math.round((i * 360 / Math.max(n, 1) + 170) % 360);
+  return `hsl(${h} 62% 46%)`;
+}
+function variants(cell){ // [li, ipa, path, ipa, path...] -> [{ipa,url}]
+  const lang = S.langs[cell[0]], out = [];
+  for (let i = 1; i < cell.length; i += 2){
+    const p = cell[i+1];
+    out.push({ipa: cell[i], url: !p ? '' : p[0] === '~' ? `${SND}${lang[1]}/${lang[1]}${p.slice(1)}.mp3` : `${SND}${p}.mp3`});
+  }
+  return out;
+}
+function toast(msg){ const t = $('toast'); t.textContent = msg; t.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => t.hidden = true, 2200); }
+
+// ---------- Audio ----------
+let playingRow = null;
+function markPlaying(r){ if (playingRow) playingRow.classList.remove('playing'); playingRow = r; if (r) r.classList.add('playing'); }
+audio.addEventListener('ended', () => { markPlaying(null); if (queue) setTimeout(stepQueue, 250); });
+audio.addEventListener('error', () => { markPlaying(null); if (queue) stepQueue(); else toast('This recording could not be loaded'); });
+function play(url, rowEl){
+  if (!url){ toast('No recording for this variety'); return; }
+  audio.src = url; markPlaying(rowEl);
+  const p = audio.play(); if (p) p.catch(() => markPlaying(null));
+}
+
+// ---------- Rendering ----------
+function setStudy(name, keepWord){
+  stopQueue();
+  studyName = name; S = DATA[name];
+  store.set('sc.study', name);
+  document.querySelectorAll('.chip').forEach(c => c.setAttribute('aria-pressed', c.dataset.s === name));
+  document.querySelector(`.chip[data-s="${CSS.escape(name)}"]`)?.scrollIntoView({inline: 'center', block: 'nearest'});
+  if (!keepWord) wi = 0;
+  wi = Math.min(Math.max(wi, 0), S.words.length - 1);
+  renderWord(true);
+}
+function renderWord(fit){
+  stopQueue(); sel = -1;
+  const [g, p] = S.words[wi];
+  $('wg').textContent = g; $('wp').textContent = p ? '*' + p.replace(/^\*/, '') : '';
+  store.set('sc.word.' + studyName, wi);
+  history.replaceState(null, '', `#${encodeURIComponent(studyName)}/${wi + 1}`);
+
+  const cells = S.cells[wi];
+  const nReg = S.regions.length;
+  // group by region, keep study language order
+  const byReg = new Map();
+  cells.slice().sort((a, b) => a[0] - b[0]).forEach(c => {
+    const r = S.langs[c[0]][4]; if (!byReg.has(r)) byReg.set(r, []); byReg.get(r).push(c);
+  });
+  const regKeys = [...byReg.keys()].sort((a, b) => (a < 0) - (b < 0) || a - b);
+  let html = '', n = 0;
+  rows = [];
+  for (const r of regKeys){
+    html += `<div class="region"><span class="dot" style="background:${regionColor(r, nReg)}"></span>${esc(r >= 0 ? S.regions[r] : 'Other')}</div>`;
+    for (const c of byReg.get(r)){
+      const L_ = S.langs[c[0]], vs = variants(c), has = vs.some(v => v.url);
+      const ipas = vs.map((v, k) => `<span class="ipa${k ? ' alt' : ''}" data-k="${k}">${esc(v.ipa || '—')}</span>`).join('');
+      html += `<button class="row${has ? '' : ' nosnd'}" data-li="${c[0]}" data-i="${rows.length}"><span class="who"><span class="ipas">${ipas}</span><span class="name">${esc(L_[0])}</span></span><span class="spk" aria-hidden="true">${ICON_SPK}</span></button>`;
+      rows.push({li: c[0], vs}); if (has) n++;
+    }
+  }
+  html += `<p class="credit">Recordings and transcriptions from <a href="https://soundcomparisons.com" target="_blank" rel="noopener">Sound Comparisons</a> (Paul Heggarty et al.). Tap a variety or a map point to hear it; tap a second transcription to hear that variant.</p>`;
+  $('list').innerHTML = html; $('list').scrollTop = 0;
+  $('count').textContent = `${n} recording${n === 1 ? '' : 's'} · ${S.words.length ? (wi + 1) + ' of ' + S.words.length + ' words' : ''}`;
+
+  // markers
+  layer.clearLayers(); markers = {};
+  const pts = [];
+  for (const row of rows){
+    const L_ = S.langs[row.li]; if (L_[2] == null || L_[3] == null) continue;
+    const m = L.circleMarker([L_[2], L_[3]], {renderer: canvas, radius: 7, weight: 1.5, color: '#fff', fillColor: regionColor(L_[4], nReg), fillOpacity: .95})
+      .bindTooltip(() => `<b>${esc(L_[0])}</b><i>${row.vs.map(v => esc(v.ipa)).join(' · ')}</i>`, {className: 'lt', direction: 'top', offset: [0, -8]})
+      .on('click', () => select(row.li, true, true));
+    m.addTo(layer); markers[row.li] = m; pts.push([L_[2], L_[3]]);
+  }
+  if (fit){
+    const b = L.latLngBounds(S.bounds);
+    const inside = pts.filter(p => b.contains(p)).length;
+    if (b.isValid() && inside >= pts.length / 2) map.fitBounds(b, {padding: [8, 8]});
+    else if (pts.length) map.fitBounds(pts, {padding: [24, 24], maxZoom: 7});
+  }
+}
+function select(li, doPlay, fromMap, k = 0){
+  if (sel >= 0 && markers[sel]) markers[sel].setStyle({radius: 7, weight: 1.5, color: '#fff'}).closeTooltip();
+  document.querySelector('.row.sel')?.classList.remove('sel');
+  sel = li;
+  const el = document.querySelector(`.row[data-li="${li}"]`);
+  if (el){ el.classList.add('sel'); if (fromMap) el.scrollIntoView({block: 'center', behavior: 'smooth'}); }
+  const m = markers[li];
+  if (m){
+    m.setStyle({radius: 11, weight: 3, color: getComputedStyle(document.body).color}).bringToFront().openTooltip();
+    if (!fromMap && !map.getBounds().pad(-0.1).contains(m.getLatLng())) map.panTo(m.getLatLng());
+  }
+  if (doPlay){ const row = rows[el?.dataset.i]; if (row) play((row.vs[k] || row.vs[0]).url, el); }
+}
+
+// ---------- Play all ----------
+function stepQueue(){
+  if (!queue) return;
+  const i = queue.shift();
+  if (i === undefined){ stopQueue(); return; }
+  const row = rows[i]; const v = row.vs.find(v => v.url);
+  if (!v) return stepQueue();
+  select(row.li, false, true);
+  play(v.url, document.querySelector(`.row[data-i="${i}"]`));
+}
+function stopQueue(){
+  queue = null; $('playall').innerHTML = ICON_PLAY + '<span>Play all</span>';
+}
+$('playall').onclick = () => {
+  if (queue){ stopQueue(); audio.pause(); markPlaying(null); return; }
+  const start = sel >= 0 ? rows.findIndex(r => r.li === sel) : 0;
+  queue = rows.map((_, i) => i).slice(Math.max(start, 0));
+  $('playall').innerHTML = ICON_STOP + '<span>Stop</span>';
+  stepQueue();
+};
+
+// ---------- Events ----------
+$('list').addEventListener('click', e => {
+  const r = e.target.closest('.row'); if (!r) return;
+  stopQueue();
+  const ipa = e.target.closest('.ipa');
+  select(+r.dataset.li, true, false, ipa ? +ipa.dataset.k : 0);
+});
+$('studies').innerHTML = STUDIES.map(s => `<button class="chip" data-s="${esc(s)}" aria-pressed="false">${esc(s)}</button>`).join('');
+$('studies').onclick = e => { const c = e.target.closest('.chip'); if (c && c.dataset.s !== studyName){ wi = +(store.get('sc.word.' + c.dataset.s) || 0); setStudy(c.dataset.s, true); } };
+$('prev').onclick = () => { wi = (wi - 1 + S.words.length) % S.words.length; renderWord(false); };
+$('next').onclick = () => { wi = (wi + 1) % S.words.length; renderWord(false); };
+
+// swipe left/right on the word bar
+let sx = null;
+document.querySelector('.wordbar').addEventListener('touchstart', e => sx = e.touches[0].clientX, {passive: true});
+document.querySelector('.wordbar').addEventListener('touchend', e => {
+  if (sx == null) return; const dx = e.changedTouches[0].clientX - sx; sx = null;
+  if (Math.abs(dx) > 50) (dx < 0 ? $('next') : $('prev')).click();
+});
+
+function renderWords(){
+  const q = $('q').value.trim().toLowerCase();
+  $('words').innerHTML = S.words.map(([g, p], i) => {
+    if (q && !(g.toLowerCase().includes(q) || (p || '').toLowerCase().includes(q))) return '';
+    return `<button class="wi${i === wi ? ' cur' : ''}" data-i="${i}"><span class="g">${esc(g)}</span><span class="p">${p ? '*' + esc(p.replace(/^\*/, '')) : ''}</span><span class="n">${S.cells[i].length}</span></button>`;
+  }).join('') || '<p class="credit">No word matches that search.</p>';
+}
+$('wordbtn').onclick = () => {
+  $('q').value = ''; renderWords(); $('sheet').hidden = false;
+  document.querySelector('.wi.cur')?.scrollIntoView({block: 'center'});
+};
+$('q').oninput = renderWords;
+$('close').onclick = () => $('sheet').hidden = true;
+$('words').onclick = e => { const b = e.target.closest('.wi'); if (!b) return; wi = +b.dataset.i; $('sheet').hidden = true; renderWord(false); };
+document.addEventListener('keydown', e => {
+  if (!$('sheet').hidden){ if (e.key === 'Escape') $('sheet').hidden = true; return; }
+  if (e.target.tagName === 'INPUT') return;
+  if (e.key === 'ArrowLeft') $('prev').click(); else if (e.key === 'ArrowRight') $('next').click();
+});
+
+// ---------- Start ----------
+function fromHash(){
+  const m = decodeURIComponent(location.hash.slice(1)).match(/^(.+?)\/(\d+)$/);
+  if (m && DATA[m[1]]){ wi = +m[2] - 1; setStudy(m[1], true); return true; }
+  return false;
+}
+window.addEventListener('hashchange', () => { const h = `#${encodeURIComponent(studyName)}/${wi + 1}`; if (location.hash !== h) fromHash(); });
+if (!fromHash()){
+  const s = DATA[store.get('sc.study')] ? store.get('sc.study') : (DATA.Romance ? 'Romance' : STUDIES[0]);
+  wi = +(store.get('sc.word.' + s) || 0);
+  setStudy(s, true);
+}
+setTimeout(() => map.invalidateSize(), 100);
+window.addEventListener('resize', () => map.invalidateSize());
+})();
+</script>
+</body>
+</html>
