@@ -144,22 +144,36 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline
 .toast{position:fixed;left:50%;top:calc(130px + env(safe-area-inset-top,0px));transform:translateX(-50%);z-index:1300;
   background:var(--ink);color:var(--bg);padding:9px 14px;border-radius:999px;font-size:13px;max-width:calc(100% - 32px)}
 
+/* Desktop: full-window map with a floating sidebar (controls card + always-open list) */
 @media (min-width:900px){
-  .panel{left:16px;right:auto;bottom:16px;width:420px;border-radius:16px}
+  body{display:block}
+  #main{position:fixed;inset:0;border:0}
+  .top{position:fixed;top:16px;left:16px;width:400px;z-index:950;background:var(--surface);border-radius:16px;
+    box-shadow:0 4px 18px rgb(0 0 0 / .14);padding-bottom:4px}
+  .src{padding-top:10px}
+  .studies{flex-wrap:wrap;overflow:visible}
+  .panel{left:16px;right:auto;width:400px;top:calc(var(--toph,200px) + 28px);bottom:16px;border-radius:16px;max-height:none}
+  .handle,#toggle{display:none!important}
+  .bar{padding-top:10px}
+  .listwrap,.panel.open .listwrap{display:flex;flex-direction:column;flex:1;height:auto;min-height:0}
   .leaflet-bottom{bottom:0}
-  .listwrap{height:min(62vh,640px)}
+  .row:hover{background:var(--hl)}
+  .chip:hover{border-color:var(--muted)}
+  .nav:hover{background:var(--hl)}
 }
 @media (prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
 </style>
 </head>
 <body>
-<div class="src"><span class="sp">Unofficial mobile view of <a href="https://soundcomparisons.com" target="_blank" rel="noopener">SoundComparisons.com</a></span><button class="info" id="infobtn" aria-haspopup="dialog">About</button></div>
+<header class="top" id="top">
+<div class="src"><span class="sp">Unofficial view of <a href="https://soundcomparisons.com" target="_blank" rel="noopener">SoundComparisons.com</a></span><button class="info" id="infobtn" aria-haspopup="dialog">About</button></div>
 <nav class="studies" id="studies" aria-label="Language family"></nav>
 <div class="wordbar">
   <button class="nav" id="prev" aria-label="Previous word"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
   <button class="word" id="wordbtn" aria-label="Choose word"><span class="g" id="wg"></span><span class="p" id="wp"></span></button>
   <button class="nav" id="next" aria-label="Next word"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></button>
 </div>
+</header>
 <div id="main">
   <div id="map" aria-label="Map of recording locations"></div>
   <section class="panel" id="panel" aria-label="Pronunciations">
@@ -219,7 +233,7 @@ let labels = store.get('sc.labels') === '1';
 const audio = new Audio(); audio.preload = 'auto';
 
 // ---------- Map ----------
-const map = L.map('map', {zoomControl: false, tap: true, attributionControl: true, worldCopyJump: true}).setView([45, 5], 4);
+const map = L.map('map', {zoomControl: false, tap: true, minZoom: 2, attributionControl: true, worldCopyJump: true}).setView([45, 5], 4);
 const dark = matchMedia('(prefers-color-scheme: dark)');
 let tiles = null;
 function setTiles(){
@@ -234,6 +248,20 @@ const canvas = L.canvas({tolerance: 10, padding: .5});
 const layer = L.layerGroup().addTo(map);
 
 // ---------- Helpers ----------
+const desktop = matchMedia('(min-width:900px)');
+function pads(extra = 0){
+  if (desktop.matches) return {paddingTopLeft: [$('panel').getBoundingClientRect().right + 24 + extra, 24 + extra], paddingBottomRight: [24 + extra, 24 + extra]};
+  return {paddingTopLeft: [16 + extra, 16 + extra], paddingBottomRight: [16 + extra, $('panel').offsetHeight + 16 + extra]};
+}
+function corePoints(pts){ // drop far-flung outliers (e.g. diaspora varieties) so the map fits the main area
+  if (pts.length < 8) return pts;
+  const med = a => { const x = a.slice().sort((p, q) => p - q); return x[x.length >> 1]; };
+  const mla = med(pts.map(p => p[0])), mlo = med(pts.map(p => p[1])), k = Math.cos(mla * Math.PI / 180);
+  const d = p => Math.hypot(p[0] - mla, (p[1] - mlo) * k);
+  const ds = pts.map(d).sort((p, q) => p - q), r = Math.max(5, 3 * ds[Math.floor(ds.length * .7)]);
+  const core = pts.filter(p => d(p) <= r);
+  return core.length >= pts.length / 2 ? core : pts;
+}
 function regionColor(i, n){
   if (i < 0) return '#888';
   const h = Math.round((i * 360 / Math.max(n, 1) + 170) % 360);
@@ -304,10 +332,8 @@ function renderWord(fit){
 
   const pts = drawMarkers();
   if (fit){
-    const b = L.latLngBounds(S.bounds);
-    const inside = pts.filter(p => b.contains(p)).length;
-    if (b.isValid() && inside >= pts.length / 2) map.fitBounds(b, {paddingTopLeft: [8, 8], paddingBottomRight: [8, $('panel').offsetHeight + 8]});
-    else if (pts.length) map.fitBounds(pts, {paddingTopLeft: [24, 24], paddingBottomRight: [24, $('panel').offsetHeight + 24], maxZoom: 7});
+    if (pts.length) map.fitBounds(corePoints(pts), {...pads(), maxZoom: 8});
+    else map.fitBounds(S.bounds, pads());
   }
 }
 function drawMarkers(){
@@ -348,7 +374,7 @@ function select(li, doPlay, fromMap, k = 0){
   const m = markers[li];
   if (m){
     highlight(m);
-    if (!fromMap) map.panInside(m.getLatLng(), {paddingTopLeft: [40, 60], paddingBottomRight: [60, $('panel').offsetHeight + 40]});
+    if (!fromMap) map.panInside(m.getLatLng(), pads(30));
   }
   if (doPlay){ const row = rows.find(r => r.li === li); if (row) play((row.vs[k] || row.vs[0]).url, el); }
 }
@@ -375,7 +401,7 @@ $('playall').onclick = () => {
 };
 
 // ---------- Panel ----------
-const isOpen = () => $('panel').classList.contains('open');
+const isOpen = () => desktop.matches || $('panel').classList.contains('open');
 function setOpen(open){
   $('panel').classList.toggle('open', open);
   $('toggle').setAttribute('aria-expanded', open);
@@ -394,6 +420,7 @@ $('labels').onclick = () => {
 };
 function peekHeight(){ document.getElementById('main').style.setProperty('--peekh', $('peek').offsetHeight + 'px'); }
 new ResizeObserver(peekHeight).observe($('peek'));
+new ResizeObserver(() => document.documentElement.style.setProperty('--toph', $('top').offsetHeight + 'px')).observe($('top'));
 let py = null;
 $('peek').addEventListener('touchstart', e => py = e.touches[0].clientY, {passive: true});
 $('peek').addEventListener('touchend', e => {
