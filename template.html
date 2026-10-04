@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#f2f4f3" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#11171a" media="(prefers-color-scheme: dark)">
-<title>Sound Comparisons Pocket</title>
+<title>Sound Comparisons (unofficial mobile view)</title>
+<meta name="description" content="An unofficial, mobile-friendly interface to SoundComparisons.com by Paul Heggarty et al. All recordings, transcriptions and language data belong to the Sound Comparisons project.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Charis+SIL:wght@400;700&family=Instrument+Sans:wght@400;500;600&display=swap">
@@ -34,6 +35,19 @@ body{background:var(--bg);color:var(--ink);font:15px/1.4 var(--f-ui);-webkit-tap
 button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
 button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 [hidden]{display:none!important}
+
+/* Source banner */
+.src{display:flex;align-items:center;gap:8px;padding:8px 16px 0;font-size:12px;color:var(--muted);flex:none}
+.src a{color:var(--accent);font-weight:600;text-decoration:none}
+.src .sp{flex:1;min-width:0}
+.info{height:28px;padding:0 10px;border-radius:999px;border:1px solid var(--line);color:var(--muted);font-size:12px;font-weight:600}
+#about .body{flex:1;overflow-y:auto;padding:16px 20px calc(24px + env(safe-area-inset-bottom,0px));max-width:68ch;line-height:1.55}
+#about h2{font-size:20px;margin:0 0 8px}
+#about h3{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:22px 0 6px}
+#about p{margin:0 0 10px}
+#about a{color:var(--accent)}
+#about .cite{font-size:13px;color:var(--muted);border-left:3px solid var(--line);padding-left:10px}
+.sheet header .t{flex:1;font-weight:600}
 
 /* Study tabs */
 .studies{display:flex;gap:6px;overflow-x:auto;padding:10px 16px 8px;scrollbar-width:none;flex:none}
@@ -114,6 +128,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline
 </style>
 </head>
 <body>
+<div class="src"><span class="sp">Unofficial mobile view of <a href="https://soundcomparisons.com" target="_blank" rel="noopener">SoundComparisons.com</a></span><button class="info" id="infobtn" aria-haspopup="dialog">About</button></div>
 <nav class="studies" id="studies" aria-label="Language family"></nav>
 <div class="wordbar">
   <button class="nav" id="prev" aria-label="Previous word"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
@@ -130,6 +145,23 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline
 <div class="sheet" id="sheet" hidden role="dialog" aria-label="Choose a word">
   <header><input id="q" type="search" placeholder="Search words" autocomplete="off" enterkeyhint="search"><button class="close" id="close">Done</button></header>
   <div id="words"></div>
+</div>
+<div class="sheet" id="about" hidden role="dialog" aria-label="About this page">
+  <header><span class="t">About</span><button class="close" id="aboutclose">Done</button></header>
+  <div class="body">
+    <h2>This is not the Sound Comparisons website</h2>
+    <p>This page is an unofficial, mobile-friendly interface to <a href="https://soundcomparisons.com" target="_blank" rel="noopener">SoundComparisons.com</a>. It only rearranges the original site's content for small screens. It is not made, endorsed or maintained by the Sound Comparisons team.</p>
+    <p>All recordings, phonetic transcriptions, word lists, language varieties, regions and map locations come from Sound Comparisons. Recordings play directly from their server, and the text data is a copy of what their public site serves, refreshed weekly.</p>
+    <h3>Original authors</h3>
+    <p>Sound Comparisons was founded by Paul Heggarty, with many contributors who recorded, transcribed and edited the material. See the full list of contributors on the <a href="https://soundcomparisons.com" target="_blank" rel="noopener">original website</a>.</p>
+    <h3>How to cite</h3>
+    <p class="cite">Heggarty, P., Shimelman, A., Abete, G., Anderson, C., Sadowsky, S., Paschen, L., Maguire, W., Jocz, L., Aninao, M. J., Wägerle, L., Dërmaku-Appelganz, D., do Couto e Silva, A. P., Lawyer, L. C., Cabral, A. S. A. C., Walworth, M., Michalsky, J., Koile, E., Runge, J. &amp; Bibiko, H.-J. (2019). Sound Comparisons: A new resource for exploring phonetic diversity across language families of the world. In S. Calhoun, P. Escudero, M. Tabain &amp; P. Warren (eds.), <i>Proceedings of the 19th International Congress of Phonetic Sciences</i>, Melbourne, 280–284.</p>
+    <p>Please cite the original work, not this page.</p>
+    <h3>Licence</h3>
+    <p>The Sound Comparisons datasets are published under <a href="https://creativecommons.org/licenses/by-nc-nd/4.0/" target="_blank" rel="noopener">CC BY-NC-ND 4.0</a>. This page is non-commercial and does not alter the recordings or transcriptions.</p>
+    <h3>This interface</h3>
+    <p>Source code: <a href="https://github.com/xanguera/soundcomparisons" target="_blank" rel="noopener">github.com/xanguera/soundcomparisons</a>. Map tiles &copy; Esri and OpenStreetMap contributors.</p>
+  </div>
 </div>
 <div class="toast" id="toast" hidden></div>
 
@@ -159,7 +191,7 @@ function setTiles(){
   const isDark = (document.documentElement.dataset.theme || (dark.matches ? 'dark' : 'light')) === 'dark';
   const base = `https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_${isDark ? 'Dark' : 'Light'}_Gray_Base/MapServer/tile/{z}/{y}/{x}`;
   if (tiles) map.removeLayer(tiles);
-  tiles = L.tileLayer(base, {maxZoom: 16, attribution: 'Tiles &copy; Esri &mdash; Esri, HERE, Garmin, &copy; OpenStreetMap contributors'}).addTo(map);
+  tiles = L.tileLayer(base, {maxZoom: 16, attribution: 'Data &amp; audio: <a href="https://soundcomparisons.com">SoundComparisons.com</a> | Tiles &copy; Esri &mdash; Esri, HERE, Garmin, &copy; OpenStreetMap contributors'}).addTo(map);
 }
 setTiles(); dark.addEventListener?.('change', setTiles);
 const canvas = L.canvas({tolerance: 10, padding: .5});
@@ -229,7 +261,7 @@ function renderWord(fit){
       rows.push({li: c[0], vs}); if (has) n++;
     }
   }
-  html += `<p class="credit">Recordings and transcriptions from <a href="https://soundcomparisons.com" target="_blank" rel="noopener">Sound Comparisons</a> (Paul Heggarty et al.). Tap a variety or a map point to hear it; tap a second transcription to hear that variant.</p>`;
+  html += `<p class="credit">Recordings, transcriptions and language data: <a href="https://soundcomparisons.com" target="_blank" rel="noopener">Sound Comparisons</a> (Paul Heggarty et al.), CC BY-NC-ND 4.0. This is an unofficial mobile interface to their website, not the original. Tap a variety or a map point to hear it; tap a second transcription to hear that variant.</p>`;
   $('list').innerHTML = html; $('list').scrollTop = 0;
   $('count').textContent = `${n} recording${n === 1 ? '' : 's'} · ${S.words.length ? (wi + 1) + ' of ' + S.words.length + ' words' : ''}`;
 
@@ -318,8 +350,11 @@ $('wordbtn').onclick = () => {
 };
 $('q').oninput = renderWords;
 $('close').onclick = () => $('sheet').hidden = true;
+$('infobtn').onclick = () => $('about').hidden = false;
+$('aboutclose').onclick = () => $('about').hidden = true;
 $('words').onclick = e => { const b = e.target.closest('.wi'); if (!b) return; wi = +b.dataset.i; $('sheet').hidden = true; renderWord(false); };
 document.addEventListener('keydown', e => {
+  if (!$('about').hidden){ if (e.key === 'Escape') $('about').hidden = true; return; }
   if (!$('sheet').hidden){ if (e.key === 'Escape') $('sheet').hidden = true; return; }
   if (e.target.tagName === 'INPUT') return;
   if (e.key === 'ArrowLeft') $('prev').click(); else if (e.key === 'ArrowRight') $('next').click();
