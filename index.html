@@ -278,6 +278,10 @@ function variants(cell){ // [li, ipa, path, ipa, path...] -> [{ipa,url}]
 function toast(msg){ const t = $('toast'); t.textContent = msg; t.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => t.hidden = true, 2200); }
 
 // ---------- Audio ----------
+// Browsers block autoplay until the page has had a user gesture; after that, hovering a dot plays it (mouse devices only)
+const canHover = matchMedia('(hover: hover) and (pointer: fine)').matches;
+let unlocked = false;
+['pointerdown', 'keydown'].forEach(t => addEventListener(t, () => { unlocked = true; }, {capture: true, once: true}));
 let playingRow = null;
 function markPlaying(r){ if (playingRow) playingRow.classList.remove('playing'); playingRow = r; if (r) r.classList.add('playing'); }
 audio.addEventListener('ended', () => { markPlaying(null); if (queue) setTimeout(stepQueue, 250); });
@@ -342,7 +346,8 @@ function drawMarkers(){
   for (const row of rows){
     const L_ = S.langs[row.li]; if (L_[2] == null || L_[3] == null) continue;
     const m = L.circleMarker([L_[2], L_[3]], {renderer: canvas, radius: 7, weight: 1.5, color: '#fff', fillColor: regionColor(L_[4], nReg), fillOpacity: .95})
-      .on('click', () => select(row.li, true, true));
+      .on('click', () => select(row.li, true, true))
+      .on('mouseover', () => { if (canHover && unlocked && !queue && sel !== row.li) select(row.li, true, true); });
     if (labels) m.bindTooltip(row.vs.map(v => esc(v.ipa)).join(' · '), {className: 'lt lab', direction: 'top', offset: [0, -6], permanent: true});
     else m.bindTooltip(`<b>${esc(L_[0])}</b><i>${row.vs.map(v => esc(v.ipa)).join(' · ')}</i>`, {className: 'lt', direction: 'top', offset: [0, -8]});
     m.addTo(layer); markers[row.li] = m; pts.push([L_[2], L_[3]]);
