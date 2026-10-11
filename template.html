@@ -161,6 +161,14 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline
   .chip:hover{border-color:var(--muted)}
   .nav:hover{background:var(--hl)}
 }
+/* Play mode switch (mouse devices on desktop layout only) */
+.mode{display:none}
+@media (min-width:900px) and (hover:hover) and (pointer:fine){
+  .mode{display:flex;position:fixed;top:16px;right:16px;z-index:950;padding:3px;gap:2px;border-radius:999px;background:var(--surface);
+    box-shadow:0 4px 18px rgb(0 0 0 / .14)}
+  .mode button{height:30px;padding:0 14px;border-radius:999px;font-size:13px;font-weight:600;color:var(--muted)}
+  .mode button[aria-pressed=true]{background:var(--accent);color:var(--accent-ink)}
+}
 @media (prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
 </style>
 </head>
@@ -174,6 +182,9 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline
   <button class="nav" id="next" aria-label="Next word"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></button>
 </div>
 </header>
+<div class="mode" id="mode" role="group" aria-label="How recordings play">
+  <button id="modeclick" aria-pressed="true">Click to play</button><button id="modehover" aria-pressed="false">Hover to play</button>
+</div>
 <div id="main">
   <div id="map" aria-label="Map of recording locations"></div>
   <section class="panel" id="panel" aria-label="Pronunciations">
@@ -279,9 +290,14 @@ function toast(msg){ const t = $('toast'); t.textContent = msg; t.hidden = false
 
 // ---------- Audio ----------
 // Browsers block autoplay until the page has had a user gesture; after that, hovering a dot plays it (mouse devices only)
-const canHover = matchMedia('(hover: hover) and (pointer: fine)').matches;
-let unlocked = false;
-['pointerdown', 'keydown'].forEach(t => addEventListener(t, () => { unlocked = true; }, {capture: true, once: true}));
+// Not persisted on purpose: the click on the switch is the gesture that unlocks audio, and it resets on every page load.
+let hoverMode = false, hoverTimer = 0;
+function setHoverMode(on){
+  hoverMode = on; clearTimeout(hoverTimer);
+  $('modeclick').setAttribute('aria-pressed', !on); $('modehover').setAttribute('aria-pressed', on);
+}
+$('modeclick').onclick = () => setHoverMode(false);
+$('modehover').onclick = () => setHoverMode(true);
 let playingRow = null;
 function markPlaying(r){ if (playingRow) playingRow.classList.remove('playing'); playingRow = r; if (r) r.classList.add('playing'); }
 audio.addEventListener('ended', () => { markPlaying(null); if (queue) setTimeout(stepQueue, 250); });
@@ -329,7 +345,7 @@ function renderWord(fit){
       rows.push({li: c[0], vs}); if (has) n++;
     }
   }
-  html += `<p class="credit">Recordings, transcriptions and language data: <a href="https://soundcomparisons.com" target="_blank" rel="noopener">Sound Comparisons</a> (Paul Heggarty et al.), CC BY-NC-ND 4.0. This is an unofficial mobile interface to their website, not the original. Tap a variety or a map point to hear it; tap a second transcription to hear that variant.</p>`;
+  html += `<p class="credit">Recordings, transcriptions and language data: <a href="https://soundcomparisons.com" target="_blank" rel="noopener">Sound Comparisons</a> (Paul Heggarty et al.), CC BY-NC-ND 4.0. This is an unofficial mobile interface to their website, not the original. Tap a variety or a map point to hear it (on desktop you can switch to hover to play); tap a second transcription to hear that variant.</p>`;
   $('list').innerHTML = html; $('list').scrollTop = 0;
   $('count').textContent = `${n} recording${n === 1 ? '' : 's'} · word ${wi + 1} of ${S.words.length}`;
   nRec = n; setNow(-1);
@@ -347,7 +363,11 @@ function drawMarkers(){
     const L_ = S.langs[row.li]; if (L_[2] == null || L_[3] == null) continue;
     const m = L.circleMarker([L_[2], L_[3]], {renderer: canvas, radius: 7, weight: 1.5, color: '#fff', fillColor: regionColor(L_[4], nReg), fillOpacity: .95})
       .on('click', () => select(row.li, true, true))
-      .on('mouseover', () => { if (canHover && unlocked && !queue && sel !== row.li) select(row.li, true, true); });
+      .on('mouseover', () => {
+        if (!hoverMode || queue || sel === row.li) return;
+        clearTimeout(hoverTimer); hoverTimer = setTimeout(() => select(row.li, true, true), 120);
+      })
+      .on('mouseout', () => clearTimeout(hoverTimer));
     if (labels) m.bindTooltip(row.vs.map(v => esc(v.ipa)).join(' · '), {className: 'lt lab', direction: 'top', offset: [0, -6], permanent: true});
     else m.bindTooltip(`<b>${esc(L_[0])}</b><i>${row.vs.map(v => esc(v.ipa)).join(' · ')}</i>`, {className: 'lt', direction: 'top', offset: [0, -8]});
     m.addTo(layer); markers[row.li] = m; pts.push([L_[2], L_[3]]);
