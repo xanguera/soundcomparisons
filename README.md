@@ -22,7 +22,8 @@ The original site is a desktop application. On a phone its layout does not adapt
 
 1. **`build.py`** downloads the study data that the original site itself loads, from `https://soundcomparisons.com/query/data`. It keeps only the fields this page displays (variety names, coordinates, regions, words, transcriptions, audio file paths) and embeds them in `index.html`. All 9 studies shrink from about 80 MB to about 4 MB.
 2. **`index.html`** is one static page (a Leaflet map plus a list). **Recordings are not copied into this repository**: each one plays directly from `soundcomparisons.com/sound/...`.
-3. A **GitHub Action** (`.github/workflows/update-data.yml`) reruns `build.py` every Monday and commits `index.html` only if Sound Comparisons has changed its data. It can also be started by hand from the Actions tab.
+3. The build also lists every recording the server reports as missing in a local **`missing-recordings.csv`** (not committed), for the Sound Comparisons maintainers. A variety with no files at all gets one row: usually a historical variety, or a wrong folder name. No audio is downloaded to make it.
+4. A **GitHub Action** (`.github/workflows/update-data.yml`) reruns `build.py` every Monday and commits `index.html` only if Sound Comparisons has changed its data. It can also be started by hand from the Actions tab.
 
 The transcriptions, names and locations are shown as published by Sound Comparisons; this interface does not edit them.
 
@@ -32,7 +33,7 @@ The transcriptions, names and locations are shown as published by Sound Comparis
 |---|---|
 | `index.html` | The built page. Serve it from any static host (GitHub Pages works). |
 | `template.html` | Page source; `__DATA__` is replaced by the build. |
-| `build.py` | Fetches the data and writes `index.html`. Python 3 standard library only. |
+| `build.py` | Fetches the data and writes `index.html` and `missing-recordings.csv`. Python 3 standard library only. |
 | `.github/workflows/update-data.yml` | Weekly automatic refresh. |
 | `LICENSE` | Licence terms (CC BY-NC-ND 4.0, following Sound Comparisons). |
 

@@ -6,6 +6,10 @@
 <meta name="theme-color" content="#f2f4f3" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#11171a" media="(prefers-color-scheme: dark)">
 <title>Sound Comparisons (unofficial mobile view)</title>
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Sound Comparisons">
 <meta name="description" content="An unofficial, mobile-friendly interface to SoundComparisons.com by Paul Heggarty et al. All recordings, transcriptions and language data belong to the Sound Comparisons project.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -40,7 +44,8 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline
 .src{display:flex;align-items:center;gap:8px;padding:6px 16px 0;font-size:12px;color:var(--muted);flex:none}
 .src a{color:var(--accent);font-weight:600;text-decoration:none}
 .src .sp{flex:1;min-width:0}
-.info{height:26px;padding:0 10px;border-radius:999px;border:1px solid var(--line);color:var(--muted);font-size:12px;font-weight:600}
+.info{height:26px;padding:0 10px;display:inline-grid;place-items:center;border-radius:999px;border:1px solid var(--line);color:var(--muted);font-size:12px;font-weight:600}
+#fsbtn svg{width:14px;height:14px}
 #about .body{flex:1;overflow-y:auto;padding:16px 20px calc(24px + env(safe-area-inset-bottom,0px));max-width:68ch;line-height:1.55}
 #about h2{font-size:20px;margin:0 0 8px}
 #about h3{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:22px 0 6px}
@@ -175,7 +180,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline
 </head>
 <body>
 <header class="top" id="top">
-<div class="src"><span class="sp">Unofficial view of <a href="https://soundcomparisons.com" target="_blank" rel="noopener">SoundComparisons.com</a></span><button class="info" id="infobtn" aria-haspopup="dialog">About</button></div>
+<div class="src"><span class="sp">Unofficial view of <a href="https://soundcomparisons.com" target="_blank" rel="noopener">SoundComparisons.com</a></span><button class="info" id="fsbtn" hidden aria-label="Full screen" title="Full screen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button><button class="info" id="infobtn" aria-haspopup="dialog">About</button></div>
 <nav class="studies" id="studies" aria-label="Language family"></nav>
 <div class="wordbar">
   <button class="nav" id="prev" aria-label="Previous word"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
@@ -219,6 +224,8 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline
     <p>Please cite the original work, not this page.</p>
     <h3>Licence</h3>
     <p>The Sound Comparisons datasets are published under <a href="https://creativecommons.org/licenses/by-nc-nd/4.0/" target="_blank" rel="noopener">CC BY-NC-ND 4.0</a>. This page is non-commercial and does not alter the recordings or transcriptions.</p>
+    <h3>Full screen</h3>
+    <p>Tap the corner-arrows button at the top to hide the browser's bars. On iPhone, where browsers do not offer full screen, use Share, then Add to Home Screen, and open the page from its icon.</p>
     <h3>This interface</h3>
     <p>Source code: <a href="https://github.com/xanguera/soundcomparisons" target="_blank" rel="noopener">github.com/xanguera/soundcomparisons</a>. Map tiles &copy; Esri and OpenStreetMap contributors.</p>
   </div>
@@ -274,11 +281,7 @@ function corePoints(pts){ // drop far-flung outliers (e.g. diaspora varieties) s
   const core = pts.filter(p => d(p) <= r);
   return core.length >= pts.length / 2 ? core : pts;
 }
-function regionColor(i, n){
-  if (i < 0) return '#888';
-  const h = Math.round((i * 360 / Math.max(n, 1) + 170) % 360);
-  return `hsl(${h} 62% 46%)`;
-}
+const regionColor = i => i < 0 ? '#888' : S.colors[i]; // chosen at build time so nearby regions differ
 function variants(cell){ // [li, ipa, path, ipa, path...] -> [{ipa,url}]
   const lang = S.langs[cell[0]], out = [];
   for (let i = 1; i < cell.length; i += 2){
@@ -328,7 +331,6 @@ function renderWord(fit){
   history.replaceState(null, '', `#${encodeURIComponent(studyName)}/${wi + 1}`);
 
   const cells = S.cells[wi];
-  const nReg = S.regions.length;
   // group by region, keep study language order
   const byReg = new Map();
   cells.slice().sort((a, b) => a[0] - b[0]).forEach(c => {
@@ -338,7 +340,7 @@ function renderWord(fit){
   let html = '', n = 0;
   rows = [];
   for (const r of regKeys){
-    html += `<div class="region"><span class="dot" style="background:${regionColor(r, nReg)}"></span>${esc(r >= 0 ? S.regions[r] : 'Other')}</div>`;
+    html += `<div class="region"><span class="dot" style="background:${regionColor(r)}"></span>${esc(r >= 0 ? S.regions[r] : 'Other')}</div>`;
     for (const c of byReg.get(r)){
       const L_ = S.langs[c[0]], vs = variants(c), has = vs.some(v => v.url);
       const ipas = vs.map((v, k) => `<span class="ipa${k ? ' alt' : ''}" data-k="${k}">${esc(v.ipa || '—')}</span>`).join('');
@@ -359,10 +361,10 @@ function renderWord(fit){
 }
 function drawMarkers(){
   layer.clearLayers(); markers = {};
-  const pts = [], nReg = S.regions.length;
+  const pts = [];
   for (const row of rows){
     const L_ = S.langs[row.li]; if (L_[2] == null || L_[3] == null) continue;
-    const m = L.circleMarker([L_[2], L_[3]], {renderer: canvas, radius: 7, weight: 1.5, color: '#fff', fillColor: regionColor(L_[4], nReg), fillOpacity: .95})
+    const m = L.circleMarker([L_[2], L_[3]], {renderer: canvas, radius: 7, weight: 1.5, color: '#fff', fillColor: regionColor(L_[4]), fillOpacity: .95})
       .on('click', () => select(row.li, true, true))
       .on('mouseover', () => {
         if (!hoverMode || queue || sel === row.li) return;
@@ -487,6 +489,15 @@ $('wordbtn').onclick = () => {
 };
 $('q').oninput = renderWords;
 $('close').onclick = () => $('sheet').hidden = true;
+// Full screen hides the browser's own bars; iPhone Safari has no such API, so the button stays hidden there
+const fsEl = document.documentElement, fsOn = () => document.fullscreenElement || document.webkitFullscreenElement;
+if (document.fullscreenEnabled || document.webkitFullscreenEnabled){
+  $('fsbtn').hidden = false;
+  $('fsbtn').onclick = () => fsOn() ? (document.exitFullscreen || document.webkitExitFullscreen).call(document)
+                                    : (fsEl.requestFullscreen || fsEl.webkitRequestFullscreen).call(fsEl);
+  const fsSync = () => { $('fsbtn').setAttribute('aria-label', fsOn() ? 'Exit full screen' : 'Full screen'); $('fsbtn').title = $('fsbtn').getAttribute('aria-label'); };
+  document.addEventListener('fullscreenchange', fsSync); document.addEventListener('webkitfullscreenchange', fsSync);
+}
 $('infobtn').onclick = () => $('about').hidden = false;
 $('aboutclose').onclick = () => $('about').hidden = true;
 $('words').onclick = e => { const b = e.target.closest('.wi'); if (!b) return; wi = +b.dataset.i; $('sheet').hidden = true; renderWord(false); };
