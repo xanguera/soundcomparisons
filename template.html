@@ -115,7 +115,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline
 #list{flex:1;overflow-y:auto;padding:0 16px 16px;overscroll-behavior:contain}
 .region{position:sticky;top:0;background:var(--surface);z-index:2;display:flex;align-items:center;gap:8px;
   padding:12px 0 6px;font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
-.dot{width:10px;height:10px;border-radius:50%;flex:none}
+.dot{width:10px;height:10px;border-radius:50%;flex:none;box-shadow:0 0 0 1px #333}
 .row{display:flex;align-items:center;gap:10px;width:100%;min-height:56px;padding:8px 10px;border-radius:var(--r);text-align:left;
   border:1px solid transparent}
 .row + .row{margin-top:2px}
@@ -281,7 +281,8 @@ function corePoints(pts){ // drop far-flung outliers (e.g. diaspora varieties) s
   const core = pts.filter(p => d(p) <= r);
   return core.length >= pts.length / 2 ? core : pts;
 }
-const regionColor = i => i < 0 ? '#888' : S.colors[i]; // chosen at build time so nearby regions differ
+const OUTLINE = '#333'; // dark ring so the pale original colours show on light tiles
+const regionColor = i => i < 0 ? '#888' : S.colors[i]; // the original site's colours, set at build time
 function variants(cell){ // [li, ipa, path, ipa, path...] -> [{ipa,url}]
   const lang = S.langs[cell[0]], out = [];
   for (let i = 1; i < cell.length; i += 2){
@@ -364,7 +365,7 @@ function drawMarkers(){
   const pts = [];
   for (const row of rows){
     const L_ = S.langs[row.li]; if (L_[2] == null || L_[3] == null) continue;
-    const m = L.circleMarker([L_[2], L_[3]], {renderer: canvas, radius: 7, weight: 1.5, color: '#fff', fillColor: regionColor(L_[4]), fillOpacity: .95})
+    const m = L.circleMarker([L_[2], L_[3]], {renderer: canvas, radius: 7, weight: 1.5, color: OUTLINE, fillColor: regionColor(L_[4]), fillOpacity: .95})
       .on('click', () => select(row.li, true, true))
       .on('mouseover', () => {
         if (!hoverMode || queue || sel === row.li) return;
@@ -379,7 +380,7 @@ function drawMarkers(){
   return pts;
 }
 function highlight(m){
-  m.setStyle({radius: 11, weight: 3, color: getComputedStyle(document.body).color}).bringToFront();
+  m.setStyle({radius: 11, weight: 3, color: getComputedStyle(document.body).getPropertyValue('--accent').trim()}).bringToFront();
   if (!labels) m.openTooltip();
 }
 function setNow(li){
@@ -393,7 +394,7 @@ function setNow(li){
   $('nowname').textContent = S.langs[li][0];
 }
 function select(li, doPlay, fromMap, k = 0){
-  if (sel >= 0 && markers[sel]){ markers[sel].setStyle({radius: 7, weight: 1.5, color: '#fff'}); if (!labels) markers[sel].closeTooltip(); }
+  if (sel >= 0 && markers[sel]){ markers[sel].setStyle({radius: 7, weight: 1.5, color: OUTLINE}); if (!labels) markers[sel].closeTooltip(); }
   document.querySelector('.row.sel')?.classList.remove('sel');
   sel = li;
   const el = document.querySelector(`.row[data-li="${li}"]`);

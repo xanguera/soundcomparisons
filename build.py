@@ -2,33 +2,20 @@
 """Fetch Sound Comparisons study data and build index.html (mobile front-end).
 Usage: python3 build.py            -> fetches live data, writes index.html
 """
-import json,os,gzip,re,csv,math,colorsys,urllib.request
+import json,os,gzip,re,csv,urllib.request
 API='https://soundcomparisons.com/query/data'
 def get(q):
   with urllib.request.urlopen(API+q, timeout=180) as r: return json.loads(r.read().decode('utf-8'))
 WS=lambda x:' '.join((x or '').split())
 HERE=os.path.dirname(os.path.abspath(__file__))
 DUMMY={'--','..','...','…'}  # the original site's marker for "no such word in this variety" (Transcription.js); skip it
-def lab(h,s,l):  # HSL -> CIELAB, to measure how different two colours look
-  f=lambda c:((c+.055)/1.055)**2.4 if c>.04045 else c/12.92
-  r,g,b=map(f,colorsys.hls_to_rgb(h/360,l,s))
-  t=lambda x:x**(1/3) if x>.008856 else 7.787*x+16/116
-  X,Y,Z=t((r*.4124+g*.3576+b*.1805)/.95047),t(r*.2126+g*.7152+b*.0722),t((r*.0193+g*.1192+b*.9505)/1.08883)
-  return 116*Y-16,500*(X-Y),200*(Y-Z)
-PALETTE=[(h,.7,l) for l in (.45,.62) for h in range(0,360,30)]
-def region_colors(langs,n):
-  # Greedy: each region takes the palette colour that differs most from regions within 300 km, so map neighbours never look alike
-  pts={}
-  for l in langs:
-    if l[2] is not None and l[4]>=0: pts.setdefault(l[4],[]).append((l[2],l[3]))
-  km=lambda a,b:min(math.hypot(p[0]-q[0],(p[1]-q[1])*math.cos(math.radians(p[0])))*111 for p in pts[a] for q in pts[b])
-  col={}
-  for a in range(n):
-    near=[b for b in col if a in pts and b in pts and km(a,b)<300]
-    gap=lambda c,bs:min([math.dist(lab(*c),lab(*col[b])) for b in bs] or [999])
-    # a gap of 50 already reads as clearly different; past that, prefer a colour no other region uses
-    col[a]=max(PALETTE,key=lambda c:(min(gap(c,near),50),c not in col.values(),gap(c,near),gap(c,col)))
-  return ['hsl(%d %d%% %d%%)'%(h,s*100,l*100) for h,s,l in (col[a] for a in range(n))]
+# The original site's colour list (soundcomparisons.com/js/models/Colors.js, live copy; the GitHub repo is out of date)
+COLORS=['#E6E6E6','#CCCCFF','#CCFFFF','#CFFF7C','#FFFACD','#FFCC99','#C59595','#E6C7DD','#FECECE','#FFFFFF']
+def region_color(d,fams,r):
+  # Same rule as the original site (models/Region.js, models/Family.js): in multi-family studies (ColorByFamily=1)
+  # a region takes its family's colour, by the family's position in the study's list; otherwise colour by RegionGpIx
+  if d['study']['ColorByFamily']=='1' and r['FamilyIx'] in fams: return COLORS[fams.index(r['FamilyIx'])%len(COLORS)]
+  return COLORS[int(r['RegionGpIx'])%len(COLORS)]
 out={};missing=[]
 studies=[x for x in get('?global')['studies'] if x!='--']
 for sname in studies:
@@ -36,10 +23,13 @@ for sname in studies:
   d=get('?study='+sname); name=d['study']['Name']
   RK=lambda r:(r['FamilyIx'],r.get('SubFamilyIx') or '0',r['RegionGpIx'])
   regs={RK(r):r['RegionGpNameLong'] for r in d['regions']}
+  fams=[f['FamilyIx'] for f in d['families']]
+  rcol={RK(r):region_color(d,fams,r) for r in d['regions']}
   rorder={RK(r):(int(r['FamilyIx']),int(r.get('SubFamilyIx') or 0),int(r['RegionGpSortIx'] or 0)) for r in d['regions']}
   lreg={}
   for rl in d['regionLanguages']:
-    lreg.setdefault(rl['LanguageIx'],(RK(rl), rl['RegionGpMemberLgNameLongInThisSubFamilyWebsite'] or ''))
+    if RK(rl) in regs:  # skip memberships of featured sets that are not a listed region (e.g. Europe's family-0 set)
+      lreg.setdefault(rl['LanguageIx'],(RK(rl), rl['RegionGpMemberLgNameLongInThisSubFamilyWebsite'] or ''))
   regList=sorted(regs, key=lambda k:rorder[k]); rid={k:i for i,k in enumerate(regList)}
   langs=[];lidx={};fps={l['LanguageIx']:l['FilePathPart'] for l in d['languages']}
   spell={l['LanguageIx']:l.get('IsOrthographyHasNoTranscriptions') for l in d['languages']}  # spelling-only rows never have recordings
@@ -85,7 +75,7 @@ for sname in studies:
     else: nmiss[li]=nmiss.get(li,0)+1
   for li,c in nmiss.items():  # one row per variety with no recordings at all: a wrong folder name, or none recorded by design
     missing.append([name,langs[lidx[li]][0],'(all %d words)'%c,'','https://soundcomparisons.com/sound/'+fps[li]+'/'])
-  out[name]={'regions':[WS(regs[k]) for k in regList],'colors':region_colors(langs,len(regList)),'langs':langs,'words':words,'cells':cells,
+  out[name]={'regions':[WS(regs[k]) for k in regList],'colors':[rcol[k] for k in regList],'langs':langs,'words':words,'cells':cells,
     'bounds':[[float(d['study']['DefaultBottomRightLat']),float(d['study']['DefaultTopLeftLon'])],[float(d['study']['DefaultTopLeftLat']),float(d['study']['DefaultBottomRightLon'])]]}
   s=json.dumps(out[name],ensure_ascii=False,separators=(',',':'))
   print(name, len(langs),'langs',len(words),'words', len(s)//1024,'KB raw', len(gzip.compress(s.encode()))//1024,'KB gz')
