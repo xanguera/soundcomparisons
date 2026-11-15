@@ -17,7 +17,32 @@ def region_color(d,fams,r):
   if d['study']['ColorByFamily']=='1' and r['FamilyIx'] in fams: return COLORS[fams.index(r['FamilyIx'])%len(COLORS)]
   return COLORS[int(r['RegionGpIx'])%len(COLORS)]
 out={};missing=[]
-studies=[x for x in get('?global')['studies'] if x!='--']
+G=get('?global');studies=[x for x in G['studies'] if x!='--'];G=G['global']
+PEOPLE={str(c['ContributorIx']):WS((c['Forenames'] or '')+' '+(c['Surnames'] or '')) for c in G['contributors']}
+STATUS={str(t['LanguageStatusType']):t['StatusTooltip'] for t in G['languageStatusTypes']}
+MGROUPS=[(str(m['MeaningGroupIx']),m['Name']) for m in G['meaningGroups']]
+CREDITS=[('Spoken by','ContributorSpokenBy'),('Recorded by','ContributorRecordedBy1'),('Recorded by','ContributorRecordedBy2'),
+  ('Sound editing','ContributorSoundEditingBy'),('Phonetic transcription','ContributorPhoneticTranscriptionBy'),('Reconstruction','ContributorReconstructionBy')]
+def info(l):
+  # Details for the variety page; only fields that have a value, credits resolved to names
+  i={'key':l['FilePathPart']}
+  def put(k,v):
+    v=WS(v)
+    if v: i[k]=v
+  put('about',l.get('ToolTip')); put('variety',l.get('SpecificLanguageVarietyName'))
+  put('status',STATUS.get(l.get('LanguageStatusType') or '')); put('period',l.get('HistoricalPeriod'))
+  put('place',', '.join(x for x in dict.fromkeys(WS(l.get(k)) for k in ('PreciseLocality','NearestCity','StateRegion')) if x))
+  put('iso',l.get('ISOCode')); put('glotto',l.get('GlottoCode')); put('wiki',(l.get('WikipediaLinkPart') or '').replace(' ','_'))
+  put('speaker',(l.get('SpeakerFirstNames') or '')+' '+(l.get('SpeakerSurnames') or ''))
+  cr={}
+  for label,k in CREDITS:
+    n=PEOPLE.get(l.get(k) or '')
+    if n and n not in cr.setdefault(label,[]): cr[label].append(n)
+  for a,y,pg in (('ContributorCitationAuthor1','Citation1Year','Citation1Pages'),('ContributorCitationAuthor2','Citation2Year','Citation2Pages')):
+    n=PEOPLE.get(l.get(a) or '')
+    if n: cr.setdefault('Source',[]).append(n+(' '+l[y] if l.get(y) else '')+(': '+l[pg] if l.get(pg) else ''))
+  if cr: i['credits']=[[k,v] for k,v in cr.items() if v]
+  return i
 for sname in studies:
   print('fetching',sname,flush=True)
   d=get('?study='+sname); name=d['study']['Name']
@@ -45,8 +70,16 @@ for sname in studies:
     widx[k]=len(words)
     g=w['FullRfcModernLg01']; 
     if w.get('LongerRfcModernLg01'): g+=' ('+w['LongerRfcModernLg01']+')'
-    words.append([g, w['FullRfcProtoLg01']])
-  # cells: per word: list of [langIdx, ipa, path]
+    g2=WS(w.get('FullRfcModernLg02'))
+    words.append([g, w['FullRfcProtoLg01'], w['FileNameRfcModernLg01'] or '', g2 if g2 and g2!=WS(w['FullRfcModernLg01']) else ''])
+  # Meaning groups (Numbers, Colours...) in the original site's order; words in member order inside each
+  gw={}
+  for w in d['words']:
+    gw.setdefault(w['MeaningGroupIx'] or '',[]).append((int(w['MeaningGroupMemberIx'] or 0),widx[w['IxElicitation']+'_'+w['IxMorphologicalInstance']]))
+  groups=[[n,[i for _,i in sorted(gw.pop(k))]] for k,n in MGROUPS if k in gw]
+  rest=sorted(i for v in gw.values() for _,i in v)
+  if rest: groups.append(['Other',rest])
+  # cells: per word: list of [langIdx, ipa, path, spelling, ipa, path, spelling...]
   cells=[[] for _ in words]
   hasSound={l['LanguageIx']:False for l in d['languages']};miss=[]
   for t in d['transcriptions'].values():
@@ -54,6 +87,7 @@ for sname in studies:
     if wk not in widx or t['LanguageIx'] not in lidx: continue
     ph=t.get('Phonetic') or ''
     ph=ph if isinstance(ph,list) else [ph]
+    sp=t.get('SpellingAltv1') or '';sp=sp if isinstance(sp,list) else [sp]
     sps=t.get('soundPaths') or []
     if sps and not isinstance(sps[0],list): sps=[sps]
     fp=fps[t['LanguageIx']];ex=t.get('path') or [];ex=ex if isinstance(ex,list) else [ex]
@@ -67,7 +101,7 @@ for sname in studies:
       path=mp[0][len('/sound/'):-4] if mp else ''
       pre=fp+'/'+fp
       if path.startswith(pre): path='~'+path[len(pre):]
-      vs.append([ph[i] if i<len(ph) else '', path])
+      vs.append([ph[i] if i<len(ph) else '', path, WS(sp[i]) if i<len(sp) and sp[i] else ''])
     if any(v[0] or v[1] for v in vs): cells[widx[wk]].append([lidx[t['LanguageIx']]]+[x for v in vs for x in v])
   nmiss={}
   for li,w,p,f in miss:
@@ -75,7 +109,7 @@ for sname in studies:
     else: nmiss[li]=nmiss.get(li,0)+1
   for li,c in nmiss.items():  # one row per variety with no recordings at all: a wrong folder name, or none recorded by design
     missing.append([name,langs[lidx[li]][0],'(all %d words)'%c,'','https://soundcomparisons.com/sound/'+fps[li]+'/'])
-  out[name]={'regions':[WS(regs[k]) for k in regList],'colors':[rcol[k] for k in regList],'langs':langs,'words':words,'cells':cells,
+  out[name]={'regions':[WS(regs[k]) for k in regList],'colors':[rcol[k] for k in regList],'langs':langs,'words':words,'groups':groups,'cells':cells,'info':[info(l) for l in d['languages']],
     'bounds':[[float(d['study']['DefaultBottomRightLat']),float(d['study']['DefaultTopLeftLon'])],[float(d['study']['DefaultTopLeftLat']),float(d['study']['DefaultBottomRightLon'])]]}
   s=json.dumps(out[name],ensure_ascii=False,separators=(',',':'))
   print(name, len(langs),'langs',len(words),'words', len(s)//1024,'KB raw', len(gzip.compress(s.encode()))//1024,'KB gz')
